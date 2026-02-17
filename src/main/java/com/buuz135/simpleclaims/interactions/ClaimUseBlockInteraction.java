@@ -19,6 +19,7 @@ import com.hypixel.hytale.server.core.modules.interaction.interaction.config.cli
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.client.UseBlockInteraction;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
+import com.hypixel.hytale.server.core.universe.world.meta.BlockState;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 import org.checkerframework.checker.nullness.compatqual.NullableDecl;
@@ -50,6 +51,11 @@ public class ClaimUseBlockInteraction extends UseBlockInteraction {
 
         for (String blocksThatIgnoreInteractRestriction : Main.CONFIG.get().getBlocksThatIgnoreInteractRestrictions()) {
             if (blockName.contains(blocksThatIgnoreInteractRestriction.toLowerCase(Locale.ROOT))) ignored = true;
+        }
+
+        // Also check BlockState type name against the ignore list
+        if (!ignored) {
+            ignored = isBlockStateTypeIgnored(world, targetBlock.getX(), targetBlock.getY(), targetBlock.getZ());
         }
 
         if (blockName.contains("chest")) {
@@ -93,6 +99,11 @@ public class ClaimUseBlockInteraction extends UseBlockInteraction {
             if (blockName.contains(blocksThatIgnoreInteractRestriction.toLowerCase(Locale.ROOT))) ignored = true;
         }
 
+        // Also check BlockState type name against the ignore list
+        if (!ignored) {
+            ignored = isBlockStateTypeIgnored(world, targetBlock.getX(), targetBlock.getY(), targetBlock.getZ());
+        }
+
         if (blockName.contains("chest")) {
             defaultInteract = PartyInfo::isChestInteractEnabled;
             permission = PartyOverrides.PARTY_PROTECTION_INTERACT_CHEST;
@@ -112,5 +123,22 @@ public class ClaimUseBlockInteraction extends UseBlockInteraction {
         if (ignored || (playerRef != null && ClaimManager.getInstance().isAllowedToInteract(playerRef.getUuid(), player.getWorld().getName(), targetBlock.getX(), targetBlock.getZ(), defaultInteract, permission))) {
             super.simulateInteractWithBlock(type, context, itemInHand, world, targetBlock);
         }
+    }
+
+    private static boolean isBlockStateTypeIgnored(World world, int x, int y, int z) {
+        try {
+            BlockState state = world.getState(x, y, z, false);
+            if (state == null) return false;
+
+            String stateTypeName = state.getClass().getSimpleName().toLowerCase(Locale.ROOT);
+            for (String ignorePattern : Main.CONFIG.get().getBlocksThatIgnoreInteractRestrictions()) {
+                if (stateTypeName.contains(ignorePattern.toLowerCase(Locale.ROOT))) {
+                    return true;
+                }
+            }
+        } catch (Throwable t) {
+            // If we can't read the state, don't bypass protection
+        }
+        return false;
     }
 }

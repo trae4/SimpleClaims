@@ -25,6 +25,7 @@ import com.hypixel.hytale.server.core.inventory.container.ItemContainer;
 import com.hypixel.hytale.server.core.io.PacketHandler;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
+import com.hypixel.hytale.server.core.universe.world.meta.BlockState;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import org.checkerframework.checker.nullness.compatqual.NonNullDecl;
 
@@ -54,6 +55,14 @@ public class InteractEventSystem extends EntityEventSystem<EntityStore, UseBlock
 
         for (String blocksThatIgnoreInteractRestriction : Main.CONFIG.get().getBlocksThatIgnoreInteractRestrictions()) {
             if (blockName.contains(blocksThatIgnoreInteractRestriction.toLowerCase(Locale.ROOT))) ignored = true;
+        }
+
+        // Also check BlockState type name against the ignore list.
+        // This allows mods with custom block states (like BarterChest) to be whitelisted
+        // by their state type name without affecting vanilla blocks of the same base type.
+        if (!ignored) {
+            ignored = isBlockStateTypeIgnored(player.getWorld(), event.getTargetBlock().getX(),
+                    event.getTargetBlock().getY(), event.getTargetBlock().getZ());
         }
 
         if (blockName.contains("chest")) {
@@ -93,6 +102,23 @@ public class InteractEventSystem extends EntityEventSystem<EntityStore, UseBlock
         if (!ignored && (playerRef != null && !ClaimManager.getInstance().isAllowedToInteract(playerRef.getUuid(), player.getWorld().getName(), event.getTargetBlock().getX(), event.getTargetBlock().getZ(), defaultInteract, permission))) {
             event.setCancelled(true);
         }
+    }
+
+    private static boolean isBlockStateTypeIgnored(World world, int x, int y, int z) {
+        try {
+            BlockState state = world.getState(x, y, z, false);
+            if (state == null) return false;
+
+            String stateTypeName = state.getClass().getSimpleName().toLowerCase(Locale.ROOT);
+            for (String ignorePattern : Main.CONFIG.get().getBlocksThatIgnoreInteractRestrictions()) {
+                if (stateTypeName.contains(ignorePattern.toLowerCase(Locale.ROOT))) {
+                    return true;
+                }
+            }
+        } catch (Throwable t) {
+            // If we can't read the state, don't bypass protection
+        }
+        return false;
     }
 
     private static ExtraResources buildExtraResourcesForBench(World world, PlayerRef playerRef, int bx, int by, int bz) {
